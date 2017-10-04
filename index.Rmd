@@ -1,0 +1,115 @@
+---
+title: "World Happiness Report Analysis"
+author: "GSD"
+date: "October 2, 2017"
+output:
+ html_document:
+    toc: yes
+    number_sections: yes
+    code_folding: show
+    theme: sandstone
+    highlight: textmate
+---
+
+```{r setup, include=FALSE ,warning=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Introducion:
+
+In this multiple datasource kernal,we are going to analyse happiness index of countries across globe with various factors like health,GDP,family,freedom,trust etc for the year 2015,2016 and 2017.We try to answer questions like What is the state of open data around the world? Which countries or regions score the highest in all the data categories? Did any countries receive lower open data scores than in previous years?
+
+> The World Happiness Report is a landmark survey of the state of global happiness. The World Happiness Report 2016 Update, which ranks 156 countries by their happiness levels, was released in Rome in advance of UN World Happiness Day, March 20th. The reports review the state of happiness in the world today and show how the new science of happiness explains personal and national variations in happiness. They reflect a new worldwide demand for more attention to happiness as a criteria for government policy.
+
+> The happiness scores and rankings use data from the Gallup World Poll. The scores are based on answers to the main life evaluation question asked in the poll.
+
+# Reading the data and getting to the variables
+
+```{r}
+library(ggplot2)
+library(plyr)
+library(dplyr)
+library(tidyr)
+library(ggcorrplot)
+library(formattable)
+library(viridis)
+happy2015=read.csv("2015.csv",header=TRUE,stringsAsFactors = FALSE)
+happy2016=read.csv("2016.csv",header=TRUE,stringsAsFactors = FALSE)
+happy2017=read.csv("2017.csv",header=TRUE,stringsAsFactors = FALSE)
+glimpse(happy2015)
+glimpse(happy2016)
+glimpse(happy2017)
+```
+
+* The columns: GDP per Capita, Family, Life Expectancy, Freedom, Generosity, Trust Government Corruption describe the extent to which these factors contribute in evaluating the happiness in each country.
+
+* The Dystopia Residual metric actually is the Dystopia Happiness Score(1.85) + the Residual value or the unexplained value for each country as stated in the previous answer.
+
+#Has the happiness score remained the same over the years?
+
+```{r}
+#Renaming column names so that it will be recognisable in joint
+colnames(happy2015)[3:12]=paste("fif",colnames(happy2015)[3:12],sep="_")
+colnames(happy2016)[3:12]=paste("six",colnames(happy2016)[3:12],sep="_")
+colnames(happy2017)[2:12]=paste("seven",colnames(happy2017)[2:12],sep="_")
+#Doing Left Joint
+open_happy=happy2015 %>% left_join(happy2016,by="Country") %>% left_join(happy2017,by="Country")
+open_happy$Country=as.factor(open_happy$Country)
+#Visualising the trend
+#names(open_happy)
+open_happy  %>% head(10) %>% select(Country,Region.x,fif_Happiness.Rank,fif_Happiness.Score,six_Happiness.Rank,six_Happiness.Score,seven_Happiness.Rank,seven_Happiness.Score) %>% formattable(list(fif_Happiness.Rank=color_bar("yellow"),fif_Happiness.Score=color_bar("lightgreen"),six_Happiness.Rank=color_bar("yellow"),six_Happiness.Score=color_bar("lightgreen"),seven_Happiness.Rank=color_bar("yellow"),seven_Happiness.Score=color_bar("lightgreen")),align="l")  
+temp=open_happy %>% select(Country,Region.x,fif_Happiness.Rank,six_Happiness.Rank,seven_Happiness.Rank,fif_Happiness.Score,six_Happiness.Score,seven_Happiness.Score) 
+#Create 2 temp dataframe for ggplot vis
+temp.rank=gather(temp,"rankyear","rank",3:5)
+temp.score=gather(temp,"scoreyear","score",3:5)
+temp.order=ddply(temp.rank,"rankyear",function(x) head(x[order(x$rank,decreasing=FALSE),],10))
+temp.order %>% ggplot(aes(x=Country,y=rank,group=rankyear,color=rankyear))+geom_line(stat="identity",na.rm=FALSE)+geom_point()+theme(legend.position="right",axis.text.x=element_text(angle=90,vjust=0.5),text=element_text(size=16))+labs(x="Country",y="Rank",title="Rank trend over the year",subtitle="How did the hapiness rank change in 16,17 compared to 15")+coord_cartesian(xlim=c(1,10))+scale_y_continuous(breaks=seq(1,10,1))
+
+```
+
+
+* Based on the graph,it may be observed that the countries which have ranked within 10 places tend to stay in that group albeit a small change in their position triggered by some factors.
+
+# Which factor does the happiness score depends upon ?
+
+We build a linear regression model with the score as y axis and rest of the variables like economy,life expectancy,freedom,corruption etc as x.
+
+## 2015 Scores:
+
+```{r}
+temp=open_happy[3:12]
+model=lm(temp$fif_Happiness.Score~ temp$fif_Economy..GDP.per.Capita.+temp$fif_Family+temp$fif_Health..Life.Expectancy.+temp$fif_Freedom+temp$fif_Freedom+temp$fif_Trust..Government.Corruption.+temp$fif_Generosity)
+summary(model)
+```
+
+
+The regression model is significant with a very high p value.76 % of the variance is explained by the model.Economy GDP per capita,Family and freedom have a positive coefficient and as they increase the happiness score also increases.Genosity is not significant where as corruption is partially significant.
+
+
+## 2016 Scores:
+
+```{r}
+temp=open_happy[14:25]
+model=lm(temp$six_Happiness.Score~ temp$six_Economy..GDP.per.Capita.+temp$six_Family+temp$six_Health..Life.Expectancy.+temp$six_Freedom+temp$six_Trust..Government.Corruption.+temp$six_Generosity)
+summary(model)
+```
+
+The model is statistically significant with 79 % of variance explained.As we saw for 2015 scores,the 2016 scores also depended on same factors.
+
+## 2017 Scores:
+
+```{r}
+temp=open_happy[26:35]
+model=lm(temp$seven_Happiness.Score~temp$seven_Economy..GDP.per.Capita.+temp$seven_Family+temp$seven_Family+temp$seven_Health..Life.Expectancy.+temp$seven_Freedom+temp$seven_Generosity+temp$seven_Trust..Government.Corruption.)
+summary(model)
+```
+
+
+Overall,the model is highly significant with 82 % of the variance explained.This model too,the happiness score depends upon the 4 factors as earlier.
+
+# Conclusion 
+
+This mini project utilises linear regression model to find out the variables responsible for happiness scores.Interesting insight is that the score value depend on variables - GDP per capita,family,life expectancy,freedom for all the three years.
+
+Another interesting finding is that there are no surprises seen in the ranking with top 10 ranks are concerned.Keeping 2015 as a base when we look at 2016 and 2017 rankings the countries rank differ only by maximum of +/- 2 ranks.
